@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -40,16 +40,21 @@ def preprocess_text(text):
     doc = nlp(text)
     tokens = [token.text.lower() for token in doc if token.is_alpha and token.text.lower() not in stop_words]
     return ' '.join(tokens)
-
 df['Processed Abstract'] = df['Abstract (English)'].apply(preprocess_text)
+
+print(df['DWPI Class'].value_counts())
+
+# 選擇樣本數最多的前10類
+top_classes = df['DWPI Class'].value_counts().index[:10]
+df_top_classes = df[df['DWPI Class'].isin(top_classes)]
 
 # TF-IDF
 tfidf_vectorizer = TfidfVectorizer()
-tfidf_matrix = tfidf_vectorizer.fit_transform(df['Processed Abstract'])
+tfidf_matrix = tfidf_vectorizer.fit_transform(df_top_classes['Processed Abstract'])
 
-# 把TF-IDF結果加到DataFrame
+# 把TF-IDF结果加到DataFrame
 tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), columns=tfidf_vectorizer.get_feature_names_out())
-df = pd.concat([df, tfidf_df], axis=1)
+df_top_classes = pd.concat([df_top_classes.reset_index(drop=True), tfidf_df.reset_index(drop=True)], axis=1)
 
 # PCA
 pca = PCA(n_components=2)
@@ -57,10 +62,10 @@ tfidf_pca = pca.fit_transform(tfidf_matrix.toarray())
 
 # 把PCA結果加到DataFrame
 pca_df = pd.DataFrame(tfidf_pca, columns=['PCA Component 1', 'PCA Component 2'])
-df = pd.concat([df, pca_df], axis=1)
+df_top_classes = pd.concat([df_top_classes, pca_df], axis=1)
 
 # Train-Test Split
-X_train, X_test, y_train, y_test = train_test_split(tfidf_matrix.toarray(), df['DWPI Class'], test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(tfidf_matrix.toarray(), df_top_classes['DWPI Class'], test_size=0.2, random_state=42)
 
 # Random Forest
 random_forest = RandomForestClassifier()
@@ -72,17 +77,17 @@ svm = SVC()
 svm.fit(X_train, y_train)
 y_pred_svm = svm.predict(X_test)
 
-# 混淆矩陣和分類結果
+# 混淆矩阵和分類結果
 def evaluate_model(y_test, y_pred, model_name):
     cm = confusion_matrix(y_test, y_pred)
     print(f"Confusion Matrix for {model_name}:\n", cm)
     print(f"Classification Report for {model_name}:\n", classification_report(y_test, y_pred))
     
     plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
-    plt.xlabel('Predicted Labels')
-    plt.ylabel('True Labels')
-    plt.title(f'Confusion Matrix of {model_name}')
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=top_classes, yticklabels=top_classes)
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+    plt.title(f'Confusion Matrix for {model_name}')
     plt.show()
 
 evaluate_model(y_test, y_pred_rf, "Random Forest")
